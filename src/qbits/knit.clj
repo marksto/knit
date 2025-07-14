@@ -40,8 +40,9 @@
 
 (defn submit
   "Submits the fn `f` to the specified `executor` and returns a `Future`."
-  ^Future [^ExecutorService executor ^Callable f]
-  (.submit executor f))
+  ^Future [^ExecutorService executor f]
+  (assert (fn? f) "The `f` must be a regular no-arg function")
+  (.submit executor ^Callable f))
 
 (def ^:deprecated execute
   "Submits the fn `f` to the specified `executor` and returns a `Future`."
@@ -101,26 +102,28 @@
                                      :or   {initial-delay 0
                                             unit          :milliseconds}
                                      :as   _opts}]
+   (assert (fn? f) "The `f` must be a regular no-arg function")
    (let [^ScheduledExecutorService executor (or executor
-                                                (qbits.knit/executor :scheduled))]
+                                                (qbits.knit/executor :scheduled))
+         ^TimeUnit time-unit (time-units unit)]
      (case type
        :with-fixed-delay
        (.scheduleWithFixedDelay executor
                                 ^Runnable f
                                 ^long initial-delay
                                 ^long delay
-                                (time-units unit))
+                                time-unit)
        :at-fixed-rate
        (.scheduleAtFixedRate executor
                              ^Runnable f
                              ^long initial-delay
                              ^long delay
-                             (time-units unit))
+                             time-unit)
        :once
        (.schedule executor
-                  ^Runnable f
+                  ^Callable f
                   ^long delay
-                  ^TimeUnit (time-units unit))))))
+                  time-unit)))))
 
 (def binding-conveyor-fn (var-get #'clojure.core/binding-conveyor-fn))
 
