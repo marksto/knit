@@ -1,23 +1,19 @@
-{:exoscale.project/lib cc.qbits/knit
- :exoscale.project/version-file "VERSION"
- :exoscale.project/deploy? true
- :slipset.deps-deploy/exec-args {:installer :remote
-                                 :sign-releases? false
-                                 :repository "clojars"}
- :exoscale.project/pom-data
- [[:licenses
-   [:license
-    [:name "Eclipse Public License - v 1.0"]
-    [:url "https://www.eclipse.org/legal/epl-1.0/"]
-    [:distribution "repo"]]]]
+{:paths ["src"]
 
- :deps {cc.qbits/commons {:mvn/version "1.0.0-alpha6"}}
+ :deps
+ {cc.qbits/commons {:mvn/version "1.0.0-alpha6"}}
+
  :aliases
- {:test
-  {:jvm-opts ["--enable-preview"]
-   :extra-deps {com.exoscale/eftest {:mvn/version "1.0.0"}}
-   :extra-paths ["dev" "test"]
-   :exec-fn test-runner/run}
-  :project {:deps {io.github.exoscale/tools.project {:git/sha "99e6b7aaccd9b97079341625c807b9fa0352e36d"}}
-            :ns-default exoscale.tools.project
-            :jvm-opts ["-Dclojure.main.report=stderr"]}}}
+ {:dev
+  {:extra-paths ["build.clj"]}
+
+  :test
+  {:extra-paths ["dev" "test"]
+   :extra-deps  {com.exoscale/eftest {:mvn/version "1.0.0"}}
+   :exec-fn     test-runner/run
+   :jvm-opts    ["--enable-preview"]}
+
+  :build
+  {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.9"}
+                slipset/deps-deploy           {:mvn/version "0.2.2"}}
+   :ns-default build}}}
