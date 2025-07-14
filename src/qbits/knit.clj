@@ -2,10 +2,13 @@
   (:refer-clojure :exclude [future future-call])
   (:require [qbits.commons.enum :as qc])
   (:import (java.lang ThreadBuilders$VirtualThreadFactory)
-           (java.util.concurrent Executors ExecutorService Future
+           (java.util.concurrent Executors
+                                 ExecutorService
+                                 Future
                                  ScheduledFuture
                                  ScheduledExecutorService
-                                 ThreadFactory TimeUnit)
+                                 ThreadFactory
+                                 TimeUnit)
            (java.util.concurrent.atomic AtomicLong)))
 
 (set! *warn-on-reflection* true)
@@ -13,14 +16,16 @@
 (def time-units (qc/enum->map TimeUnit))
 
 (defn thread-group
-  "Returns a new ThreadGroup instance to be used in thread-factory"
+  "Returns a new `ThreadGroup` instance to be used in the `thread-factory`."
   ^ThreadGroup
   ([^ThreadGroup parent ^String name]
    (ThreadGroup. parent name))
   ([^String name]
    (ThreadGroup. name)))
 
-(defn thread-factory [& {:keys [fmt priority daemon]}]
+(defn thread-factory
+  "Returns a new `ThreadFactory` instance to be used in the `executor`."
+  [& {:keys [fmt priority daemon]}]
   (let [thread-cnt (AtomicLong. 0)]
     (reify ThreadFactory
       (newThread [_ f]
@@ -34,25 +39,31 @@
           thread)))))
 
 (defn submit
-  "Submits the fn to specified executor, returns a Future"
+  "Submits the fn `f` to the specified `executor` and returns a `Future`."
   ^Future
   [^ExecutorService executor ^Callable f]
   (.submit executor f))
 
 (def ^:deprecated execute
-  "Submits the fn to specified executor, returns a Future"
+  "Submits the fn `f` to the specified `executor` and returns a `Future`."
   submit)
 
 (defn executor
-  "Returns an instances of an ExecutorService of the corresponding type.
-  `type` can be :single, :cached, :fixed, :scheduled, :scheduled-single,
-         :thread-per-task, or :virtual
-  `opts` map may include `:thread-factory` (otherwise a default one will be used)
-         and `:num-threads` for :fixed and :scheduled executor (the default is 1)"
+  "Returns an instances of an `ExecutorService` of the corresponding type.
+
+   Parameters:
+   - `type` — the executor type, which can be `:single`, `:cached`, `:fixed`,
+              `:scheduled`, `:scheduled-single`, `:thread-per-task`, `:virtual`;
+   - `opts` — an options map that may include:
+     - `:thread-factory` — a custom `ThreadFactory` instance to use for threads
+                           creation, otherwise a default one is used;
+     - `:num-threads`    — for `:fixed` or `:scheduled` executor, 1 by default."
   ^ExecutorService
-  ([type] (executor type nil))
+  ([type]
+   (executor type nil))
   ([type & {:keys [thread-factory num-threads]
-            :or {num-threads (int 1)} :as _opts}]
+            :or   {num-threads 1}
+            :as   _opts}]
    (if (= :virtual type)
      (if (some? thread-factory)
        (do (assert (= ThreadBuilders$VirtualThreadFactory (class thread-factory)))
@@ -68,15 +79,31 @@
          :thread-per-task (Executors/newThreadPerTaskExecutor thread-factory))))))
 
 (defn schedule
-  "Return a ScheduledFuture.
-  `type` can be :with-fixed-delay, :at-fixed-rate, :once
-  `delay`'s default unit is milliseconds
-  `f` task (function) to be run"
+  "Schedules the given fn `f` for execution and returns a `ScheduledFuture`.
+
+   Parameters:
+   - `f`     — a no-arg function to be scheduled for execution;
+   - `type`  — can be `:once` (default), `:with-fixed-delay`, `:at-fixed-rate`;
+   - `delay` — for `:with-fixed-delay` — the delay between the termination of
+               one execution and the commencement of the next;
+               for `:at-fixed-rate` — the period between successive executions;
+               0 by default, i.e. no delay;
+   - `opts`  — an options map that may include:
+     - `:executor`      — a `ScheduledExecutorService` to schedule the task on;
+     - `:initial-delay` — a time to delay 1st execution, in the specified unit;
+     - `:unit`          — a keywordized name of the `TimeUnit` enum value,
+                          `:milliseconds` by default."
   ^ScheduledFuture
-  ([type delay f] (schedule type delay f nil))
+  ([f]
+   (schedule :once 0 f nil))
+  ([type f]
+   (schedule type 0 f nil))
+  ([type delay f]
+   (schedule type delay f nil))
   ([type delay f & {:keys [executor initial-delay unit]
-                    :or {initial-delay 0
-                         unit :milliseconds}}]
+                    :or   {initial-delay 0
+                           unit          :milliseconds}
+                    :as   _opts}]
    (let [executor (or executor (qbits.knit/executor :scheduled))]
      (case type
        :with-fixed-delay
@@ -91,28 +118,22 @@
                              ^long initial-delay
                              ^long delay
                              (time-units unit))
-       :once (.schedule ^ScheduledExecutorService executor
-                        ^Runnable f
-                        ^long delay
-                        ^TimeUnit (time-units unit))))))
+       :once
+       (.schedule ^ScheduledExecutorService executor
+                  ^Runnable f
+                  ^long delay
+                  ^TimeUnit (time-units unit))))))
 
 (def binding-conveyor-fn (var-get #'clojure.core/binding-conveyor-fn))
+
 (def deref-future (var-get #'clojure.core/deref-future))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; futures (needs proxy);;;;;;;;;;;;;;;;;;
 (defn future-call
-  "Takes a function of no args and yields a future object that will
-  invoke the function in another thread, and will cache the result and
-  return it on all subsequent calls to deref/@. If the computation has
-  not yet finished, calls to deref/@ will block, unless the variant
-  of deref with timeout is used. See also - realized?."
-  {:added "1.1"
-   :static true}
-  [f {:as _options
-      :keys [executor preserve-bindings?]
-      :or {preserve-bindings? true
-           executor clojure.lang.Agent/soloExecutor}}]
-
+  "A variant of the `clojure.core/future-call` aux fn that supports `options`."
+  [f {:keys [preserve-bindings? executor]
+      :or   {preserve-bindings? true
+             executor           clojure.lang.Agent/soloExecutor}
+      :as   _options}]
   (let [f (if preserve-bindings?
             (binding-conveyor-fn f)
             f)
@@ -134,11 +155,18 @@
       (cancel [_ interrupt?] (.cancel fut interrupt?)))))
 
 (defmacro future
-  "Takes an executor instance and a body of expressions and yields a
-   future object that will invoke the body in another thread, and will
-   cache the result and return it on all subsequent calls to deref/@. If
-   the computation has not yet finished, calls to deref/@ will block,
-   unless the variant of deref with timeout is used.."
+  "Takes a body of expressions with the map of `options` and yields a future
+   object that will invoke the body in another (executor's) thread, and will
+   cache the result and return it on all subsequent calls to `deref`/`@`.
+
+   If the computation has not yet finished, calls to `deref`/`@` will block,
+   unless the variant of deref with timeout is used. See also — `realized?`.
+
+   A variant of the `clojure.core/future` that supports following `options`:
+   - `:preserve-bindings?` — `true` by default; if `false`, won't convey the
+                             current thread bindings to the executor thread;
+   - `:executor`           — the `Agent/soloExecutor` by default."
+  {:arglists '([body-expr+ ?options])}
   [& args]
   (assert (and (>= (count args) 2)
                (map? (last args))))
