@@ -1,12 +1,13 @@
 (ns qbits.knit
   (:refer-clojure :exclude [future future-call])
   (:require [qbits.commons.enum :as qc])
-  (:import (java.lang ThreadBuilders$VirtualThreadFactory)
+  (:import (clojure.lang Agent IBlockingDeref IDeref IPending)
+           (java.lang ThreadBuilders$VirtualThreadFactory)
            (java.util.concurrent Executors
                                  ExecutorService
                                  Future
-                                 ScheduledFuture
                                  ScheduledExecutorService
+                                 ScheduledFuture
                                  ThreadFactory
                                  TimeUnit)
            (java.util.concurrent.atomic AtomicLong)))
@@ -17,15 +18,14 @@
 
 (defn thread-group
   "Returns a new `ThreadGroup` instance to be used in the `thread-factory`."
-  ^ThreadGroup
-  ([^ThreadGroup parent ^String name]
-   (ThreadGroup. parent name))
-  ([^String name]
-   (ThreadGroup. name)))
+  (^ThreadGroup [^String name]
+   (ThreadGroup. name))
+  (^ThreadGroup [^ThreadGroup parent ^String name]
+   (ThreadGroup. parent name)))
 
 (defn thread-factory
   "Returns a new `ThreadFactory` instance to be used in the `executor`."
-  [& {:keys [fmt priority daemon]}]
+  ^ThreadFactory [& {:keys [fmt priority daemon]}]
   (let [thread-cnt (AtomicLong. 0)]
     (reify ThreadFactory
       (newThread [_ f]
@@ -40,8 +40,7 @@
 
 (defn submit
   "Submits the fn `f` to the specified `executor` and returns a `Future`."
-  ^Future
-  [^ExecutorService executor ^Callable f]
+  ^Future [^ExecutorService executor ^Callable f]
   (.submit executor f))
 
 (def ^:deprecated execute
@@ -58,12 +57,11 @@
      - `:thread-factory` — a custom `ThreadFactory` instance to use for threads
                            creation, otherwise a default one is used;
      - `:num-threads`    — for `:fixed` or `:scheduled` executor, 1 by default."
-  ^ExecutorService
-  ([type]
+  (^ExecutorService [type]
    (executor type nil))
-  ([type & {:keys [thread-factory num-threads]
-            :or   {num-threads 1}
-            :as   _opts}]
+  (^ExecutorService [type & {:keys [thread-factory num-threads]
+                             :or   {num-threads 1}
+                             :as   _opts}]
    (if (= :virtual type)
      (if (some? thread-factory)
        (do (assert (= ThreadBuilders$VirtualThreadFactory (class thread-factory)))
@@ -93,33 +91,33 @@
      - `:initial-delay` — a time to delay 1st execution, in the specified unit;
      - `:unit`          — a keywordized name of the `TimeUnit` enum value,
                           `:milliseconds` by default."
-  ^ScheduledFuture
-  ([f]
+  (^ScheduledFuture [f]
    (schedule :once 0 f nil))
-  ([type f]
+  (^ScheduledFuture [type f]
    (schedule type 0 f nil))
-  ([type delay f]
+  (^ScheduledFuture [type delay f]
    (schedule type delay f nil))
-  ([type delay f & {:keys [executor initial-delay unit]
-                    :or   {initial-delay 0
-                           unit          :milliseconds}
-                    :as   _opts}]
-   (let [executor (or executor (qbits.knit/executor :scheduled))]
+  (^ScheduledFuture [type delay f & {:keys [executor initial-delay unit]
+                                     :or   {initial-delay 0
+                                            unit          :milliseconds}
+                                     :as   _opts}]
+   (let [^ScheduledExecutorService executor (or executor
+                                                (qbits.knit/executor :scheduled))]
      (case type
        :with-fixed-delay
-       (.scheduleWithFixedDelay ^ScheduledExecutorService executor
+       (.scheduleWithFixedDelay executor
                                 ^Runnable f
                                 ^long initial-delay
                                 ^long delay
                                 (time-units unit))
        :at-fixed-rate
-       (.scheduleAtFixedRate ^ScheduledExecutorService executor
+       (.scheduleAtFixedRate executor
                              ^Runnable f
                              ^long initial-delay
                              ^long delay
                              (time-units unit))
        :once
-       (.schedule ^ScheduledExecutorService executor
+       (.schedule executor
                   ^Runnable f
                   ^long delay
                   ^TimeUnit (time-units unit))))))
@@ -132,22 +130,22 @@
   "A variant of the `clojure.core/future-call` aux fn that supports `options`."
   [f {:keys [preserve-bindings? executor]
       :or   {preserve-bindings? true
-             executor           clojure.lang.Agent/soloExecutor}
+             executor           Agent/soloExecutor}
       :as   _options}]
   (let [f (if preserve-bindings?
             (binding-conveyor-fn f)
             f)
         fut (submit executor f)]
     (reify
-      clojure.lang.IDeref
+      IDeref
       (deref [_] (deref-future fut))
-      clojure.lang.IBlockingDeref
+      IBlockingDeref
       (deref
         [_ timeout-ms timeout-val]
         (deref-future fut timeout-ms timeout-val))
-      clojure.lang.IPending
+      IPending
       (isRealized [_] (.isDone fut))
-      java.util.concurrent.Future
+      Future
       (get [_] (.get fut))
       (get [_ timeout unit] (.get fut timeout unit))
       (isCancelled [_] (.isCancelled fut))
