@@ -38,16 +38,6 @@
             (.setPriority thread (int priority)))
           thread)))))
 
-(defn submit
-  "Submits the fn `f` to the specified `executor` and returns a `Future`."
-  ^Future [^ExecutorService executor f]
-  (assert (fn? f) "The `f` must be a regular no-arg function")
-  (.submit executor ^Callable f))
-
-(def ^:deprecated execute
-  "Submits the fn `f` to the specified `executor` and returns a `Future`."
-  submit)
-
 (defn executor
   "Returns an instances of an `ExecutorService` of the corresponding type.
 
@@ -76,6 +66,12 @@
          :scheduled (Executors/newScheduledThreadPool (int num-threads) thread-factory)
          :scheduled-single (Executors/newSingleThreadScheduledExecutor thread-factory)
          :thread-per-task (Executors/newThreadPerTaskExecutor thread-factory))))))
+
+(defn submit
+  "Submits the given fn `f` to the specified `executor` and returns a `Future`."
+  ^Future [^ExecutorService executor f]
+  (assert (fn? f) "The `f` must be a regular no-arg function")
+  (.submit executor ^Callable f))
 
 (defn schedule
   "Schedules the given fn `f` for execution and returns a `ScheduledFuture`.
@@ -125,9 +121,11 @@
                   ^long delay
                   time-unit)))))
 
-(def binding-conveyor-fn (var-get #'clojure.core/binding-conveyor-fn))
+(def ^:private binding-conveyor-fn
+  (var-get #'clojure.core/binding-conveyor-fn))
 
-(def deref-future (var-get #'clojure.core/deref-future))
+(def ^:private deref-future
+  (var-get #'clojure.core/deref-future))
 
 (defn future-call
   "A variant of the `clojure.core/future-call` aux fn that supports `options`."
