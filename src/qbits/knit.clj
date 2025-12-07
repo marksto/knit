@@ -77,49 +77,54 @@
   "Schedules the given fn `f` for execution and returns a `ScheduledFuture`.
 
    Parameters:
-   - `f`     — a no-arg function to be scheduled for execution;
-   - `type`  — can be `:once` (default), `:with-fixed-delay`, `:at-fixed-rate`;
-   - `delay` — for `:with-fixed-delay` — the delay between the termination of
-               one execution and the commencement of the next;
-               for `:at-fixed-rate` — the period between successive executions;
-               0 by default, i.e. no delay;
-   - `opts`  — an options map that may include:
+   - `f`    — a no-arg function to be scheduled for execution;
+   - `type` — can be `:once` (default), `:at-fixed-rate`, `:with-fixed-delay`;
+   - `opts` — an options map that may include:
      - `:executor`      — a `ScheduledExecutorService` to schedule the task on;
-     - `:initial-delay` — a time to delay 1st execution, in the specified unit;
-     - `:unit`          — a keywordized name of the `TimeUnit` enum value,
+                          when not provided, a single-threaded `:scheduled` is
+                          created and used by default;
+     - `:delay`         — for `:once` — the time from now to delay execution;
+                          for `:at-fixed-rate` — the period between successive
+                          executions;
+                          for type `:with-fixed-delay` — the delay between the
+                          termination of one execution and the commencement of
+                          the next;
+                          0 by default, meaning no delay;
+     - `:initial-delay` — the time to delay first execution;
+     - `:unit`          — the time unit of the `:delay` and `:initial-delay`;
+                          it's a keywordized name of the `TimeUnit` enum value,
                           `:milliseconds` by default."
   (^ScheduledFuture [f]
-   (schedule :once 0 f nil))
+   (schedule :once f nil))
   (^ScheduledFuture [type f]
-   (schedule type 0 f nil))
-  (^ScheduledFuture [type delay f]
-   (schedule type delay f nil))
-  (^ScheduledFuture [type delay f & {:keys [executor initial-delay unit]
-                                     :or   {initial-delay 0
-                                            unit          :milliseconds}
-                                     :as   _opts}]
+   (schedule type f nil))
+  (^ScheduledFuture [type f & {:keys [executor delay initial-delay unit]
+                               :or   {delay         0
+                                      initial-delay 0
+                                      unit          :milliseconds}
+                               :as   _opts}]
    (assert (fn? f) "The `f` must be a regular no-arg function")
    (let [^ScheduledExecutorService executor (or executor
                                                 (qbits.knit/executor :scheduled))
          ^TimeUnit time-unit (time-units unit)]
      (case type
-       :with-fixed-delay
-       (.scheduleWithFixedDelay executor
-                                ^Runnable f
-                                ^long initial-delay
-                                ^long delay
-                                time-unit)
+       :once
+       (.schedule executor
+                  ^Callable f
+                  ^long delay
+                  time-unit)
        :at-fixed-rate
        (.scheduleAtFixedRate executor
                              ^Runnable f
                              ^long initial-delay
                              ^long delay
                              time-unit)
-       :once
-       (.schedule executor
-                  ^Callable f
-                  ^long delay
-                  time-unit)))))
+       :with-fixed-delay
+       (.scheduleWithFixedDelay executor
+                                ^Runnable f
+                                ^long initial-delay
+                                ^long delay
+                                time-unit)))))
 
 (def ^:private binding-conveyor-fn
   (var-get #'clojure.core/binding-conveyor-fn))
