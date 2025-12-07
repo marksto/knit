@@ -17,9 +17,9 @@
 
 (deftest test-schedule
   (let [r (atom {:with-fixed-delay 0 :at-fixed-rate 0 :once 0})]
-    (k/schedule :once 1000 #(swap! r update-in [:once] inc))
-    (k/schedule :with-fixed-delay 1000 #(swap! r update-in [:with-fixed-delay] inc))
-    (k/schedule :at-fixed-rate 1000 #(swap! r update-in [:at-fixed-rate] inc))
+    (k/schedule :once #(swap! r update-in [:once] inc) :delay 1000)
+    (k/schedule :with-fixed-delay #(swap! r update-in [:with-fixed-delay] inc) :delay 1000)
+    (k/schedule :at-fixed-rate #(swap! r update-in [:at-fixed-rate] inc) :delay 1000)
 
     (Thread/sleep 4500)
 
